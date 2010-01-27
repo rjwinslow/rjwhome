@@ -1,0 +1,26 @@
+#!/usr/local/tools/perl/bin/perl
+use strict;
+use warnings;
+my $debug = 0;
+my $exe = (split /\//, $0)[-1];
+my $Iam = $ENV{'USER'} || $ENV{'LOGNAME'};
+
+use LWP::UserAgent;
+use WWW::Mechanize;
+
+my $flag;
+foreach my $arg (@ARGV)
+    { $flag = $arg
+    };
+
+my $ua = LWP::UserAgent->new;
+$ua->timeout(5);
+
+my $r = $ua->get('http://devsvn.gspt.net/fisheye/admin/addRep!default.do');
+if($r->is_success)
+    { print $r->decoded_content;
+    }
+else { die $r->status_line
+    };
+
+exit 0;

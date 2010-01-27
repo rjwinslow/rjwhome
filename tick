@@ -1,0 +1,23 @@
+#!/usr/local/tools/perl/bin/perl
+use strict;
+use warnings;
+my $debug = 0;
+my $exe = (split /\//, $0)[-1];
+my $Iam = $ENV{'USER'} || $ENV{'LOGNAME'};
+
+my $work_server = 'secdevapp01';
+
+my $loc_box = `uname -n`;
+chomp $loc_box;
+if($loc_box eq "$work_server.gspt.net")
+    { die "$exe: you can't run $exe on $work_server, not $loc_box\n" };
+
+my $flag;
+foreach my $arg (@ARGV)
+    { $flag = $arg
+    };
+
+if($exe =~ /^tick/i) { print "tock\n" }
+elsif($exe =~ /^tock/i) { print "tick\n" }
+else { print "Huh/\n" };
+exit 0;

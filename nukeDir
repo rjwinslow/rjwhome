@@ -1,0 +1,18 @@
+#!/usr/local/tools/perl/bin/perl
+# nukeDir - rm -rf equivalent in perl without fork
+use strict;
+use warnings;
+my $debug = 0;
+my $exe = (split /\//, $0)[-1];
+my $Iam = $ENV{'USER'} || $ENV{'LOGNAME'};
+
+use File::Find;
+
+my $RDErr = "clearDir: could't rmdir directory ";
+my $ULErr = "clearDir: couldn't unlink file ";
+
+find { bydepth => 1, no_chdir => 1,
+    wanted => sub { if(!-l && -d) { rmdir or warn "$RDErr $_: $!\n" }
+		    else { unlink or warn "$ULErr $_: $!\n" }
+    }} => @ARGV;
+exit 0;

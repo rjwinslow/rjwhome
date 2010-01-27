@@ -1,0 +1,74 @@
+#!/usr/bin/perl
+# step3 - do step 3 of
+#  http://confluence.gspt.net/display/ss/DS2+webstore+sandbox+setup+for+WL10
+use strict;
+use warnings;
+
+use POSIX qw( strftime );
+
+my $exe = (split /\//, $0)[-1];
+
+my $uid = 'xyzzy';
+if($#ARGV != 0)
+    { die "$exe: Usage: sudo $exe <user_id>  # on secdevapp01\n" }
+else { $uid = shift };
+if(!-d "/home/$uid")
+    { die "$exe: User $uid has no home: aborting\n" };
+
+my $loc_box = `uname -n`;
+chomp $loc_box;
+if($loc_box ne 'secdevapp01.gspt.net')
+    { die "$exe: you must run $exe on secdevapp01, not $loc_box\n" };
+
+if($< || $>) { die "$exe: you must be root to run $exe: $!\n" };
+
+my $TStamp = strftime('%Y%m%d',localtime(time));
+
+# open Name Service Configuration file for editing
+my $NSC = '/var/named/master/db.webdev.gspt.net';
+open(NSC,"$NSC") or die "$exe: can't read $NSC: $!\n";
+my $NEW = "/tmp/db.webdev.gspt.net.$$";
+open(NEW,"> $NEW") or die "$exe: can't write $NEW: $!\n";
+
+my $sComment = '    ;serial - YYYYMMDDNNN';
+while(defined(my $line = <NSC>))
+    { if($line =~ m{\s+(20\d\d[01]\d[0-3]\d)(\d\d\d)\s*;serial})
+	{ my($ts, $num) = ($1, $2);
+	if($ts =~ m{$TStamp})
+	    { $num++;
+	    print NEW "                $TStamp$num$sComment\n";
+	    }
+	else { print NEW "                ${TStamp}000$sComment\n" };
+	next
+	};
+    print NEW $line;
+    };
+print NEW '*.'."$uid IN CNAME secdevweb02.gspt.net.\n";
+close NSC;
+close NEW;
+unlink $NSC or die "$exe: can't rm $NSC; aborting: $!\n";
+# we use cp here rather than mv to preserve file permision
+my $CMD = "/bin/cp $NEW $NSC";
+my $result = `$CMD`;
+if(defined($result) && length($result))
+    { print "$0: Failed to cp $NEW to $NSC: $NSC is now missing: $!\n";
+    print "$CMD\n$result";
+    print "Fix this, then run \"/usr/sbin/rndc reload\"\n";
+    exit 1
+    };
+# when we get to this point, we're ready to nuke our intermediate file
+unlink($NEW) or die "$exe: can't rm $NEW: $!\n";
+$CMD = '/usr/sbin/rndc reload';
+$result = `$CMD`;
+if(defined($result) && length($result))
+    { print "$CMD\n$result" };
+my $RPT = '/tmp/wlsStep1'.$ENV{'USER'}.'.rpt';
+open(RPT,"$RPT") or die "$0: can't read $RPT: $!\n";
+my $entry = <RPT>; close RPT;
+chomp $entry;
+my ($Uid, $UxD, $port, $t_port) = split /\t/, $entry;
+if(!defined($UxD) || !length($UxD)) { $UxD = 'UxD' };
+if(!defined($t_port) || !length($t_port)) { $t_port = '' };
+print "Now \"/bin/ping foo.$uid.webdev.gspt.net\" and if successful,\n";
+print "  on secdevweb02 run \"sudo step4 $uid $UxD $port $t_port\"\n";
+exit 0;

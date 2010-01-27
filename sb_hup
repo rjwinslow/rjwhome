@@ -1,0 +1,35 @@
+#!/usr/local/tools/perl/bin/perl
+# sb_hup - hup some sandbox
+use strict;
+use warnings;
+my $debug = 0;
+
+use IO::Handle;
+
+my $Iam = $ENV{'LOGNAME'};
+if(!defined($Iam) || !-d "/home/$Iam")
+    { die "$0: This user has ($Iam) no home\n" };
+# cd ~/webdev/weblogic10/; ./mvc.sh stop; sleep 30; ./mvc.sh start
+my $WLH = "/home/$Iam/webdev/weblogic10/";
+if(!-d $WLH)
+    { die "$0: this user has no sandbox (no weblogic10); aborting\n" }
+else { chdir($WLH) or die "$0: can't cd to $WLH: $!\n" };
+my $CMD = './mvc.sh stop';
+my $result = `$CMD`;
+
+sleep(30);
+
+$CMD = './mvc.sh start';
+$result = `$CMD`;
+
+my $LOG = 'mvc.log';
+open(LOG,"$LOG") or die "$0: can't read $WLH/$LOG: $!\n";
+while(<LOG>) { };
+for(;;)
+    { while(my $line = <LOG>) { print $line };
+    sleep 1;
+    LOG->clearerr();
+    };
+
+exit 0;
+

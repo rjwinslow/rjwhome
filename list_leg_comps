@@ -1,0 +1,102 @@
+#!/usr/local/tools/perl/bin/perl
+use strict;
+use warnings;
+my $debug = 0;
+my $exe = (split /\//, $0)[-1];
+my $Iam = $ENV{'USER'} || $ENV{'LOGNAME'};
+
+my $loc_box = `uname -n`;
+chomp $loc_box;
+$loc_box =~ s{.gspt.net$}{};
+
+my %components = ();
+my @comps = qw(
+   TRUWebService
+   TRUWebServiceTools
+   addressverify
+   authentication
+   backend_utilities
+   boot
+   bootstudio
+   breadcrumbs
+   cache_warmup
+   cms
+   crm
+   crypt
+   customtags
+   dbconnection
+   email_campaigns
+   epiphanyclient
+   ess
+   events
+   gbuy
+   gift
+   gsi-legacy-tools-webapp
+   gsi_core
+   gsi_tools
+   i18n
+   inventory_utilities
+   jda
+   jdabatch
+   jmsclient
+   legacy_buildsystem
+   legacy_parent
+   logging
+   mailer
+   nexus
+   partner_rtc
+   payment
+   paynet
+   presentation
+   publishtools
+   realmedia
+   recentlyviewed
+   search
+   searchtools
+   shipfromClient
+   storetools
+   svs
+   taxclient
+   taxware
+   thirdpartyorderitem
+   tracking
+   value_link
+   webservices
+   webstore
+   webstore_emulation
+   webstore_oracle
+   webstore_preview
+   wlstools
+   wocclient
+   xmltools
+);
+
+my $LCdir = '/opt/svn/legacy_components_GRP/reposroot';
+
+my $CMD = ($loc_box ne 'secdevapp01')?'/usr/bin/ssh secdevapp01 ':'';
+$CMD .= "/bin/ls $LCdir";
+open(CMD,"$CMD |") or die "$exe: can't $CMD: $!\n";
+while(my $repo = <CMD>)
+    { next if($repo =~ m{^\.});
+    chomp $repo;
+    my $known = 0;
+    foreach my $kcmp (@comps)
+	{ if($repo eq $kcmp) { $known++; last };
+	};
+    if(!$known) { warn "$repo wasn't a known legacy_component.\n" };
+    $components{$repo} = $repo;
+    }; close CMD;
+
+foreach my $pcmp (@comps)
+    { my $known = 0;
+    foreach my $ncmp (keys %components)
+	{ if($ncmp eq $pcmp) { $known++; last };
+	};
+    if(!$known) { warn "$pcmp is no longer a legacy_component.\n" };
+    };
+
+my $count = 0;
+foreach my $Comp (sort keys %components) { $count++; print "$Comp\n" };
+print "-----\nThere are $count components.\n";
+
+exit 0;

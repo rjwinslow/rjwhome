@@ -1,0 +1,30 @@
+#!/usr/local/tools/perl/bin/perl
+# mail_report - delete routine mail; summarize results
+use strict;
+use warnings;
+my $debug = 1;
+die "Relies on unavailable perl module\n";
+
+use Email::Folder::Exchange;
+
+my $mailService = 'https://webmail.gsicommerce.com/';
+#my $mailService = 'https://webmail.gsicommerce.com/CookieAuth.dll?GetLogon?curl=Z2Fexchange&formdir=1';
+
+my $exe = (split /\//, $0)[-1];	# get executable name for use in error messages
+
+my $Iam = $ENV{'LOGNAME'} || $ENV{'USER'};
+my $mPass = '';
+foreach my $arg (@ARGV)
+    { $mPass = $arg };
+if(!length($mPass)) { die "$exe: Usage: $exe <your_email_password>\n" };
+
+# use existing instance if Outlook is already running, or launce a new one
+my $folder = Email::Folder::Exchange->new($mailService, $Iam, $mPass);
+if(!defined($folder)) { die "$exe: can't access $mailService: $!\n" };
+
+foreach my $message ($folder->messages)
+    { print 'Subject: '.$message->header('Subject');
+    };
+
+exit 0;
+

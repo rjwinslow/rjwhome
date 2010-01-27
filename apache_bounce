@@ -1,0 +1,7 @@
+#!/bin/bash
+if [ -x "/usr/local/apache2/bin/hupapache.sh" ]
+then
+  /usr/bin/sudo /usr/local/apache2/bin/hupapache.sh
+else
+  echo "No /usr/local/apache2/bin/hupapache.sh found"
+fi

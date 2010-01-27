@@ -1,0 +1,162 @@
+#!/usr/local/tools/perl/bin/perl
+# tool to do step 1 of
+#  http://confluence.gspt.net/display/ss/DS2+webstore+sandbox+setup+for+WL10
+use strict;
+use warnings;
+
+# get patless name of this executable for error reporting
+my $exe = (split '/', $0)[-1];
+
+# establish target servers for web tech developers
+my @servers = qw( secdevapp03 secdevapp04 secdevapp05 );
+
+my $sandbox_box = '/home/winslowr/bin/sb_best_host';
+my $freeport = '/home/winslowr/ss_scripts/freeport';
+my $ssh = '/usr/bin/ssh';
+my $finger = '/usr/bin/finger';
+
+# assure we're running on secdevapp01
+my $loc_box = `uname -n`;
+chomp $loc_box;
+if($loc_box ne 'secdevapp01.gspt.net')
+    { die "$exe: you must run $exe on secdevapp01, not $loc_box\n" };
+
+my $uxd = '';
+my $uid = '';		# the caller must specify a developer whose environment
+			# is to be set up
+foreach my $arg (@ARGV)
+    { if($arg =~ /^uxd$/i) # allow override of target servers for UxD developers
+	{ $uxd = 'UxD';
+	@servers = qw( secdevapp04 secdevapp05 secdevapp07 );
+	next
+	};
+    if($arg =~ /^webtech/i) { $uxd = 'WebTech'; next }
+    elsif($arg =~ /^uxd/i) { $uxd = 'UxD'; next };
+    if($arg =~ /^[a-z].*/) { $uid = $arg };
+    };
+if(length($uid) < 3) { die "$exe: you must specify a user\n" };
+my $uhome = '/home/'.$uid;
+if(!-d $uhome) { die "$exe: $uid has no home\n" };
+while(!length($uxd))
+    { print "Is $uid a UxD or WebTech user?\n";
+    my $ans = <STDIN>;
+    chomp($ans);
+    $uxd = ($ans =~ /^u/i)?'UxD':($ans =~ /^w/i)?'WebTech':'';
+    };
+
+# now assure that this developer doesn't reside on kopprdnss01
+my $DFC = "/bin/df -k $uhome";
+open(DFC, "$DFC |") or die "$exe: can't run df on $uhome: $!\n";
+while(my $line = <DFC>)
+    { if($line =~ m{([^.]+)\.gspt.net:})
+	{ my $homeHome = $1;
+	if($homeHome eq 'kopprdnss01')
+	    { my $txt = 'Notify Judy Braddick that ';
+	    die "$exe: $txt $uid is homed on kopprdnss01\n"
+	    };
+	last
+	};
+    }; close DFC;
+
+# here we choose the server on which to place the next sandbox
+# we use the sb_best_host tool to find the server in the appropriate set
+# which hosts the fewest current sandboxen
+my $Uxd = ($uxd eq 'UxD')?'UxD':'WebTech';
+my $CMD = "$ssh secdevweb02 $sandbox_box $Uxd";
+my $server = `$CMD`;
+chomp $server;
+
+# here we scan /etc/services for the next free port number
+my $PCK = "$ssh secdevapp04 $freeport";
+my $port = `$PCK`;
+my $tport;
+chomp $port;
+($port, $tport) = (split /\s+/, $port)[1,7];
+
+# get the full name for this uid
+open(FGR,"$finger $uid |") or die "$0: can't finger $uid: $!\n";
+my $FGR = <FGR>;
+close FGR;
+my $Name = ($FGR =~ m{Name:\s*(.*)$})?$1:'';
+
+# see if this uid already has a weblogic instance set up and kill his
+# instance if so
+# first, find out if this uid has an entry in 
+# secdevweb02:/usr/local/apache2/conf/devel/
+my $usersHost = '';
+my $apaConfDir = '/usr/local/apache2/conf/devel';
+my $CHK = "$ssh secdevweb02 /bin/ls $apaConfDir/$uid.conf";
+my $result = `$CHK`;
+chomp $result;
+if($result ne "$apaConfDir/$uid.conf")
+    { print "User $uid has no $apaConfDir/$uid.conf file on secdevweb02\n";
+    print "  Skipping halt of weblogic for $uid\n";
+    }
+else { $CHK = "$ssh secdevweb02 /bin/grep WebLogicHost $apaConfDir/$uid.conf";
+    $result = `$CHK`;
+    chomp $result;
+    $usersHost = (split /\s+/, $result)[-1];
+    $CHK = "$ssh $usersHost /bin/ls /home/$uid/webdev/weblogic*/mvc.sh";
+    $result = `$CHK`;
+    chomp $result;
+    if($result =~ m{/home/$uid/webdev/weblogic[81]\d*/mvc.sh})
+	{ if(my $pid = wl_check($usersHost, $uid))
+	    { print "Halting $uid sandbox on $usersHost; pid $pid\n";
+	    wl_zap($usersHost, $uid, $pid)
+	    };
+	}
+    else { print "User $uid doesn't have WebLocic set up yet\n" };
+    };
+
+# report our findings to the caller
+$server = (length($usersHost) && $server ne $usersHost)?$usersHost:$server;
+$server =~ s{.gspt.net$}{};
+
+my $dskQ = ($uxd eq 'UxD')?5:10;
+
+my $Msg = "On $server run \"/usr/bin/sudo /bin/su - $uid\" and note the ";
+$Msg .= "disk quota.\nIf this developers disk quota isn't $dskQ Gb, run ";
+$Msg .= '"id" and '."refer to:\n";
+$Msg .= "http://confluence.gspt.net/display/ss/How+to+request+quota+increase+in+home\n";
+$Msg .= "about how to adjust this developers quota.\n-----------------\n";
+$Msg .= "$uid should be set up on $server using port $port";
+if($Uxd eq 'WebTech') { $Msg .= ", tools=$tport" };
+
+my $eom = ($Uxd eq 'WebTech')?"tools=$tport":'';
+print $Msg."\n  Next, on secdevapp03 run \"step2 $uid $port $eom\"\n";
+my $RPT = '/tmp/wlsStep1'.$ENV{'USER'}.'.rpt';
+open(RPT,"> $RPT") or die "$0: can't write $RPT: $!\n";
+if(length($eom)) { $eom =~ s/tools=// };
+print RPT "$uid\t$Uxd\t$port\t$eom\n";
+close RPT;
+
+exit 0;
+
+sub wl_check {
+my ($server, $uid) = @_;
+
+my $pj = '/gsi/local/scripts/psjava';
+my $CHK = "$ssh $server $pj 2>/dev/null";
+my $pid = 0;
+open(CHK, "$CHK |") or die "$exe: can't run psjava on $server: $!\n";
+while(my $line = <CHK>)
+    { if($line =~ /webstore_$uid/)
+	{ $line =~ s/^\s*//;
+	if(($pid = (split /\s+/, $line)[0]) =~ /^\d+$/)
+	    {}
+	else { $pid = (split /\s+/, $line)[1] };
+	};
+    }; close CHK;
+return $pid
+}
+
+sub wl_zap {
+my ($srv, $uid, $pid) = @_;
+
+my $kj = '/gsi/local/scripts/killjava';
+my $CMD = "$ssh $srv /usr/bin/sudo $kj $pid";
+print "\n$CMD\n---------------------\n"; return;
+my $result = `$CMD`;
+return
+}
+

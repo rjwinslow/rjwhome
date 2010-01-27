@@ -1,0 +1,39 @@
+#!/usr/bin/perl
+use strict;
+use warnings;
+my $debug = 0;
+my $exe = (split /\//, $0)[-1];
+my $Iam = $ENV{'USER'} || $ENV{'LOGNAME'};
+
+my $work_server = 'secdevweb02';
+
+my $dev;
+foreach my $arg (@ARGV)
+    { if(-d "/home/$arg") { $dev = $arg } else
+        { warn "$arg doesn't seem to be a valid developer; no /home: Ignoring\n" };
+    };
+if(!defined($dev) || !length($dev)) { die "Usage: box_info <devel_uid>\n" };
+
+my $loc_box = `uname -n`;
+chomp $loc_box;
+if($loc_box ne "$work_server.gspt.net")
+    { my $CMD = "/usr/bin/ssh $work_server $0 $dev |";
+    open(CMD,$CMD) or die "$exe: can't $CMD: $!\n";
+    while(<CMD>) { print }; close CMD;
+    exit;
+    };
+
+my $inf_dir = '/usr/local/apache2/conf/devel';
+open(DEV,"$inf_dir/$dev.conf")
+  or die "box_info: can't read $inf_dir/$dev.conf: $!\n";
+my %ports = ();
+my %hosts = ();
+while(my $line = <DEV>)
+    { if($line =~ /WebLogicHost\s(\S+)$/)
+	{ $hosts{$1}++; };
+    if($line =~ /WebLogicPort\s(\S+)$/)
+	{ $ports{$1}++; };
+    }; close DEV;
+foreach my $host (sort keys %hosts) { print "WebLogicHost $host\n" };
+foreach my $port (sort keys %ports) { print "WebLogicPort $port\n" };
+exit 0;

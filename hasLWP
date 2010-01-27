@@ -1,0 +1,43 @@
+#!/usr/local/tools/perl/bin/perl
+# #!/usr/bin/perl
+# test script to create a get routine based on wget when the LWP::Simple
+# module isn't available.
+use strict;
+use warnings;
+my $debug = 1;
+
+BEGIN {
+if(eval "use LWP::Simple; 1")
+    { # the LWP:: Simple module is available on this system; let user know 
+    print "LWP::Simple is available on this system.\n";
+    }
+else {
+print "LWP::Simple isn't available on this system.\n";
+
+sub get($) {
+my $url = shift;
+
+my $CMD = "/usr/bin/wget $url 2>&1";
+my $result = `$CMD`;
+if($result =~ m{`(index.html.\d)' saved })
+    { my $file = $1;
+    open(URL,$file) or die "$0: can't read $file: $!\n";
+    my $page = <URL>;
+    close URL;
+    my @lines = split("\n", $page);
+    return \@lines;
+    unlink($file) or die "$0: can't rm $file: $!\n";
+    }
+else { return undef };
+}
+    };
+};
+
+# now test the function of whichever get we've got
+my $URL = 'http://webtech.gspt.net/maven/inhouse/gsicommerce/gsi-legacy-store/';
+
+my $lp = get($URL);
+my @lines = (ref $lp)?@$lp:(split "\n", $lp);
+print "$#lines  $lines[0]\n";
+
+exit;

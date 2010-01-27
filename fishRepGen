@@ -1,0 +1,27 @@
+#!/usr/local/tools/perl/bin/perl
+# show a list of the available projects in fisheye
+use strict;
+use warnings;
+my $debug = 0;
+my $exe = (split /\//, $0)[-1];
+my $Iam = $ENV{'USER'} || $ENV{'LOGNAME'};
+
+use LWP::Simple;
+my $URL = 'http://devsvn.gspt.net/fisheye/';
+
+my $flag;
+foreach my $arg (@ARGV)
+    { $flag = $arg
+    };
+
+my %list = ();
+my @lines = split /\n/, get($URL);
+foreach my $line (@lines)
+    { if($line =~ m{<a href="/fisheye/changelog/([^"]+)"})
+	{ $list{$1}++;
+	};
+    };
+
+foreach my $repo (sort keys %list) { print "$repo\n" };
+
+exit 0;

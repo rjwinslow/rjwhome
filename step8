@@ -1,0 +1,107 @@
+#!/usr/local/tools/perl/bin/perl
+# step8 - do step 8 of
+# http://confluence.gspt.net/display/ss/DS2+webstore+sandbox+setup+for+WL10
+use strict;
+use warnings;
+my $debug = 0;
+
+use Expect;
+
+my $WLSetup = '/opt/bea/wlserver10mp1/common/bin/config.sh -mode=console';
+print "Run $WLSetup by hand\n"; exit;
+
+my $Iam = $ENV{'LOGNAME'} || $ENV{'USER'};
+if(!defined($Iam) || !-d "/home/$Iam")
+    { die "$0: This user ($Iam) has no home\n" };
+
+# edit the template response stream file for this user, then open the response
+# stream to supply responses to each section
+# use this template file
+my $TPL = '/home/winslowr/bea_conf_template';
+
+&setup_response_stream;
+
+# use expect to respond to WebLogic setup script
+my $WLconf = Expect->spawn($WLSetup) or die "Can't run $WLSetup: $!\n";
+$WLconf->log_stdout(0);
+# set the resonse to be expected for first section
+my $response_prompt = "Enter index number to select OR [Exit][Next]> ";
+
+# allow extra time (15 seconds) for startup
+unless($WLconf->expect(15, "Welcome:")) { die "$0: Unwelcome\n"; };
+
+# fetch first section
+next_section("Extend an existing WebLogic");
+
+# get and respond to next section; reset expected response for this and
+# subsequent sections
+$response_prompt = " OR [Exit][Previous][Next]> ";
+next_section("Select Domain Source:");
+next_section("Application Template Selection:");
+next_section("Username and Password:");		# name select
+next_section("Username and Password:");		# set name
+next_section("Username and Password:");		# password select
+# reset expected response for this section
+$response_prompt = " OR [Exit][Reset][Accept]> ";
+next_section("Username and Password:");		# set password
+# reset expected response for this section
+$response_prompt = " OR [Exit][Previous][Next]> ";
+next_section("Username and Password:");		# confirm password select
+# reset expected response for this section
+$response_prompt = " OR [Exit][Reset][Accept]> ";
+next_section("Username and Password:");		# confirm password
+# reset expected response for this section
+$response_prompt = " OR [Exit][Previous][Next]> ";
+next_section("Username and Password:");		# next
+next_section("Domain Mode Configuration:");
+next_section("Java SDK Selection:");
+next_section("Choose Configuration Option:");
+next_section("Configure the Administration Server:"); # name select
+next_section("Configure the Administration Server:"); # webstore_<user>
+next_section("Configure the Administration Server:"); # port select
+next_section("Configure the Administration Server:"); # set port
+next_section("Configure the Administration Server:"); # for next
+next_section("Configure Managed Servers:");
+next_section("Configure Clusters:");
+next_section("Configure Machines:");
+next_section("Configure Unix Machines:");
+next_section("target domain directory for this domain:");
+next_section("Edit Domain Information:");	# for uid
+next_section("Edit Domain Information:");	#for next
+
+$WLconf->soft_close;
+close RSP;	# and close the response stream
+exit 0;
+
+## my @respHist = ();
+sub next_section {
+my $string = shift;
+
+my $errLvl = 0;
+unless($WLconf->expect(5, $string)) { $errLvl++; warn "$0: No $string\n" };
+if($debug) { print "EXPECT: $string: " . $WLconf->after."\n"; };
+unless($WLconf->expect(3, $response_prompt))
+    { $errLvl++; warn "$0: $string <>$response_prompt<> failed.\n"; };
+my $rsp = <RSP>;
+print $WLconf $rsp;
+## chomp $rsp; push @respHist, $rsp;
+## if($errLvl) { warn "next_section: error($errLvl) $string; $#respHist - $respHist[-2], $rsp\n" }; 
+if($debug) { print "Sent <>$rsp<>\n" };
+}
+
+sub setup_response_stream {
+# to create a response stream file for this developer
+my $BEA = "/home/$Iam/bea_conf_input";		# response stream for this dev
+# open the response stream template file
+open(TPL,$TPL) or die "$0: can't read $TPL: $!\n";
+open(BEA,"> $BEA") or die "$0: can't write $BEA: $!\n";
+while(defined(my $line = <TPL>))
+    { $line =~ s{__USER__}{$Iam}g;
+    #if($debug) { print $line };
+    print BEA $line;
+    }; close TPL;
+close BEA;
+# then open the new response stream
+open(RSP,$BEA) or die "$0: can't read $BEA: $!\n";
+}
+

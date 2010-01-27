@@ -1,0 +1,38 @@
+#!/usr/local/tools/perl/bin/perl
+# mail_filter - discard routine mail
+use strict;
+use warnings;
+my $debug = 1;
+
+# GSI doesn't support POP3 services, so this is defunct
+die "GSI doesn't support POP3 for Microslush Exchange; sorry\n";
+
+use Net::POP3;
+
+my $mailServer = 'KOPEXCHCLUS02.gsicorp.net';
+
+my $exe = (split /\//, $0)[-1];	# get executable name for use in error messages
+
+my $Iam = $ENV{'LOGNAME'};
+my $who = '';
+foreach my $arg (@ARGV)
+    { $who = $arg };
+if(!length($who)) { die "$exe: Usage: $exe <uid>\n" };
+
+my $pop;
+defined($pop = Net::POP3->new($mailServer, Timeout => 5)) ||
+  die "$exe: can't open connection to $mailServer: $!\n";
+defined($pop->login('winslowr','wWtait1k')) ||
+  die "$exe: $mailServer doesn't know winslowr: $!\n";
+my $messages = $pop->list ||
+  die "$exe: can't fetch mail from $mailServer: $!\n";
+foreach my $msgid (keys %$messages)
+    { my $message = $pop->get($msgid);
+    if(!defined($message))
+	{ warn "Can't fetch $msgid from $mailServer: $!\n";
+	next
+	};
+    print @$message."\n----------\n";
+    };
+
+exit 0;

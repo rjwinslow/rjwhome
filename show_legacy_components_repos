@@ -1,0 +1,26 @@
+#!/usr/local/tools/perl/bin/perl
+use strict;
+use warnings;
+my $debug = 0;
+my $exe = (split /\//, $0)[-1];
+my $Iam = $ENV{'USER'} || $ENV{'LOGNAME'};
+
+my $work_server = 'secdevapp01';
+my $repos_root = '/opt/svn/legacy_components_GRP/reposroot';
+
+my $loc_box = `uname -n`;
+chomp $loc_box;
+if($loc_box ne "$work_server.gspt.net")
+    { die "$exe: you must run $exe on $work_server, not $loc_box\n" };
+
+my $flag;
+foreach my $arg (@ARGV)
+    { $flag = $arg
+    };
+
+opendir(REP,$repos_root) or die "$exe: can't read $repos_root directory: $!\n";
+my @repos = grep /^[a-zA-Z]/, readdir(REP);
+closedir REP;
+for my $repo (sort @repos) { print "$repo\n" };
+
+exit 0;

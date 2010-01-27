@@ -1,0 +1,24 @@
+#!/usr/local/tools/perl/bin/perl
+use strict;
+use warnings;
+my $debug = 0;
+my $exe = (split /\//, $0)[-1];
+my $Iam = $ENV{'USER'} || $ENV{'LOGNAME'};
+
+my $compURL = 'http://devsvn.gspt.net/svn/test/legacy_components/trunk/';
+
+my $full;
+foreach my $arg (@ARGV)
+    { $full = $arg
+    };
+$full = (defined($full) && length($full))?$compURL:'';
+
+my $CMD = "/usr/bin/svn ls $compURL";
+open(CMD,"$CMD |") or die "$exe: can't $CMD: $!\n";
+while(my $line = <CMD>)
+    { next if($line =~ /^trunk\//);
+    chomp $line;
+    chop $line;
+    print "$full$line\n";
+    }; close CMD;
+exit 0;

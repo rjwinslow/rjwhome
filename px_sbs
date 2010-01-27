@@ -1,0 +1,27 @@
+#!/usr/bin/perl
+# px - ps -ef then grep for each argument; show only entries that match all args
+use strict;
+use warnings;
+
+my $PST = '/bin/ps -ef';
+
+open(PST,"$PST |") or die "$0: can't run ps: $!\n";
+my %devs = ();
+while(my $proc = <PST>)
+    { next if($proc =~ m(/usr/bin/perl bin/px ));
+    next if($proc =~ m(/usr/bin/perl /home/winslowr/bin/px ));
+    next if($proc !~ m{/bin/java });
+    $devs{(split /\s+/, $proc)[0]}++;
+    #print $proc;
+    };
+
+my $sandboxen = 0;
+my $javas = 0;
+foreach my $dev (sort keys %devs)
+    { $javas++;
+    next if($dev =~ /^\d+$/);
+    $sandboxen++;
+    print "$dev\n"
+    };
+print "There are $sandboxen($javas java procs) sandboxes running on this server.\n";
+exit;

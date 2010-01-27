@@ -1,0 +1,26 @@
+#!/usr/bin/perl
+# px - ps -ef then grep for each argument; show only entries that match all args
+use strict;
+use warnings;
+
+my $PST = '/bin/ps -ef';
+if($#ARGV < 0)
+    { die "Usage: px <ps_grep_string>\n" };
+open(PST,"$PST |") or die "$0: can't run ps: $!\n";
+while(my $proc = <PST>)
+    { next unless $proc =~ /$ARGV[0]/;
+    next if($proc =~ m(/usr/bin/perl bin/px ));
+    next if($proc =~ m(/usr/bin/perl /home/winslowr/bin/px ));
+    my $show = 0;
+    if($#ARGV > 0)
+	{ my $idx = $#ARGV;
+	while($idx)
+	    { if($proc =~ /$ARGV[$idx]/)
+		{ --$idx; $show++; next }
+	    else { $show = 0; last };
+	    };
+	}
+    else { $show++ };
+    if($show) { print $proc };
+    };
+exit;

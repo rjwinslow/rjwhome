@@ -1,0 +1,21 @@
+#!/usr/bin/perl
+use strict;
+use warnings;
+my $debug = 0;
+my $exe = (split /\//, $0)[-1];
+my $Iam = $ENV{'USER'} || $ENV{'LOGNAME'};
+
+my @group = qw( andersona braddickj fortes winslowr shakellim boldenw gardnerm );
+
+my $flag;
+foreach my $arg (@ARGV)
+    { $flag = $arg
+    };
+
+my @grp = ();
+for my $uid (sort @group)
+    { if(-d "/home/$uid") { push @grp, $uid }
+    else { warn "$uid ain't got no home\n" };
+    };
+print "@grp\n";
+exit 0;

@@ -1,0 +1,20 @@
+#!/usr/local/tools/perl/bin/perl
+# chk_services - scan /etc/services for some user (sandbox)
+use strict;
+use warnings;
+my $debug = 1;
+
+my @servers = qw( secdevapp03 secdevapp04 secdevapp05 secdevapp07 );
+
+my $who = '';
+foreach my $arg (@ARGV)
+    { $who = $arg };
+if(!length($who)) { die "$0: Usage: chk_services <uid>\n" };
+
+foreach my $server (@servers)
+    { my $CMD = "/usr/bin/ssh $server /bin/grep $who /etc/services";
+    my $result = `$CMD`;
+    print "$server: $result\n";
+    };
+
+exit 0;

@@ -1,0 +1,24 @@
+#!/usr/bin/perl
+# sb_check - tail the mvc.log of some users sandbox
+use strict;
+use warnings;
+
+if($#ARGV != 0)
+    { die "Usage: sb_check <short_user_name>\n" };
+
+# gather possible user names from /home directory
+opendir(HOM,'/home') or die "can't read /home directory: $!\n";
+my @users = grep /^[A-Za-z0-9]/, readdir HOM;
+
+foreach my $user (sort @users)
+    { if($user =~ /^$ARGV[0]/)	# if requested user is a match
+	{ my $LOG = "/home/$user/webdev/weblogic10/mvc.log";
+	if(-f $LOG)
+	    { my $CMD = "/usr/bin/tail -f $LOG";
+	    open(TAL,"$CMD |") or die "$0: can't $CMD: $!\n";
+	    while(my $line = <TAL>) { print $line };
+	    }
+	else { die "User $user has no mvc.log\n" };
+	}
+    };
+exit;

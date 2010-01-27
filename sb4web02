@@ -1,0 +1,97 @@
+#!/usr/bin/perl
+# tool to do step 4 of
+#  http://confluence.gspt.net/display/ss/DS2+webstore+sandbox+setup+for+WL10
+use strict;
+use warnings;
+
+my $exe = (split '/', $0)[-1];
+
+my $ssh = '/usr/bin/ssh';
+
+my $CMD = '';		# my global command string residence
+my $result = '';	# my global command string results residence
+
+my $loc_box = `uname -n`;
+chomp $loc_box;
+
+# gather required argument information
+my $uid = '';
+my $port = 0;
+my $t_port = 0;
+my $target = 0;
+my $devType = '';
+foreach my $arg (@ARGV)
+    { if($arg =~ /^\d$/ && $arg > 2 && $arg < 8 && $arg != 6)
+	{ $target = $arg; next };
+    if($arg =~ /^-?webtech/i) { $devType = 'WebTech'; next }
+    elsif($arg =~ /^-?uxd/i) { $devType = 'UxD'; next };
+    if($arg =~ /^\d{4}$/ && $arg > 1000 && $arg < 9999)
+	{ if(!$port) { $port = $arg }
+	elsif(!$t_port) { $t_port = $arg }
+	else { warn "You've specified too many ports: ignoring $arg\n" };
+	next
+	};
+    if($arg =~ /^[a-z].*/) { $uid = $arg };
+    };
+if(!$port) { die "$exe: you must specify a port number\n" };
+if(length($uid) < 3) { die "$exe: you must specify a user\n" };
+while(!length($devType))
+    { print "Is $uid a WebTech or UxD developer?\n";
+    my $ans = <STDIN>;
+    chomp $ans;
+    $devType = ($ans =~ /^w/i)?'WebTech':($ans =~ /^u/i)?'UxD':'';
+    };
+if($loc_box ne 'secdevweb02.gspt.net')
+    { $CMD = "$ssh secdevweb02 $exe $port $devType $uid\n";
+    $result = `$CMD`;
+    if(defined($result) && length($result)) { print $result };
+    exit
+    };
+
+open(FGR,"/usr/bin/finger $uid |") or die "$0: can't finger $uid: $!\n";
+my $FGR = <FGR>;
+close FGR;
+my $Name = ($FGR =~ m{Name:\s*(.*)$})?$1:'';
+
+# here we chose the server on which to place the next sandbox
+# we use the sandbox_box tool to find the server in the set:
+# secdevapp03 secdevapp04 secdevapp05 secdevapp07
+# which has the fewest current sandboxen
+my $sandbox_box = '/home/winslowr/bin/sb_best_host '.$devType;
+
+open(TRG,"$sandbox_box |") or
+  die "$exe: can't run sb_best_host: $!\n";
+my $server = <TRG>; close TRG;
+# sandbox_box returns a server name; we need only its number to specify
+# the template file to utilize below
+chomp $server;
+$target = (length($server))?substr($server,-1):7;
+
+# the directory in which sandbox config files reside
+my $cdir = '/usr/local/apache2/conf/devel';
+# the template file to use for the server where this sandbox will be located
+my $tmpl = "$cdir/TEMPLATE0$target.conf.sample";
+open(TMP,$tmpl) or die "$exe: can't read $tmpl: $!\n";
+open(CNF,">$cdir/$uid.conf") or die "$exe: can't write $cdir/$uid.conf: $!\n";
+
+while(defined(my $line = <TMP>))
+    { $line =~ s/USERNAME/$uid/g;
+    $line =~ s/User +Name$/$Name/;
+    $line =~ s/PORTWEBSTORE/$port/g;
+    if($devType eq 'WebTech' && $t_port)
+	{ $line =~ s/PORTTOOLS/$t_port/g };
+    $line =~ s/weblogic8/weblogic10/g;
+    print CNF $line;
+    };
+close TMP;
+close CNF;
+
+$CMD = "/bin/chown $uid:engineer $cdir/$uid.conf";
+$result = `$CMD`;
+if(defined($result) && length($result)) { print "$CMD\n$result" };
+
+$CMD = "/usr/local/apache2/bin/hupapache.sh";
+$result = `$CMD`;
+if(defined($result) && length($result)) { print "$CMD\n$result" };
+print "The sandbox for $uid is $server:$port\n";
+exit 0;

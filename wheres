@@ -1,0 +1,14 @@
+#!/usr/local/tools/perl/bin/perl
+use strict;
+use warnings;
+my $debug = 0;
+
+if($#ARGV != 0) { die "$0: Usage: wheres <some_perl_module>\n" };
+my $target = shift;
+
+foreach my $DIR (@INC)
+    { if($debug) { print "Checking $DIR\n"; };
+    if(-e "$DIR/$target") { print "$DIR/$target\n" };
+    };
+
+exit 0;

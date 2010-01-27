@@ -1,0 +1,112 @@
+#!/usr/local/tools/perl/bin/perl
+# step2 - do step 2 of
+#  http://confluence.gspt.net/display/ss/DS2+webstore+sandbox+setup+for+WL10
+use strict;
+use warnings;
+my $debug = 0;
+my $exe = (split /\//, $0)[-1]; # extract my name for error reporting
+
+use POSIX qw( strftime );
+
+# make a list of servers other than the one I'm running on
+my @servers = qw( secdevapp03 secdevapp04 secdevapp05 secdevapp07 );
+my $SSH = '/usr/bin/ssh';
+my $SCP = '/usr/bin/scp';
+
+# assure I'm running where I expect to
+my $loc_box = `uname -n`;
+chomp $loc_box;
+if($loc_box ne 'secdevapp03.gspt.net')
+    { die "$exe: you must run $exe on secdevapp03, not $loc_box\n" }
+else { $loc_box =~ s{.gspt.net$}{} };
+
+# gather command line arguments
+my $uid;
+my $port;
+my $t_port;
+foreach my $arg (@ARGV)
+    { if($arg =~ /^6\d{3}$/) { $port = $arg; next };
+    if($arg =~ /^tools=(\d\d\d\d)/) { $t_port = $1; next };
+    if($arg =~ /^debug/i)
+	{ if($arg =~ /=(\d)/)
+	    { $debug = $1;
+	    }
+	else { my $state = ($debug)?'On':'Off';
+	    print "Debugging is $state\n"
+	    };
+	next
+	};
+    $uid = $arg
+    };
+# authenticate command line arguments
+if(!defined($uid) || !length($uid))
+    { die "$exe: Usage: $exe <uid> <port> [tools=<tool_port>]\n" };
+if(!defined($port) || !$port) { die "$exe: Usage: $exe <uid> <port>\n" };
+my $p_target = $port - 1;
+if($uid !~ /^[a-z][a-zA-Z0-9_]*$/ || $port !~ /^6\d{3}$/)
+    { die "$exe: Usage: $exe <uid> <port>\n" };
+
+open(FGR,"/usr/bin/finger $uid |") or die "$0: can't finger $uid: $!\n";
+my $FGR = <FGR>;
+close FGR;
+my $Name = ($FGR =~ m{Name:\s*(.*)$})?$1:$uid;
+
+my $ttag = strftime('%Y%m%d%H%M', localtime(time));
+my $TMP = "/tmp/$$.services$ttag";
+foreach my $server (@servers)
+    { my $CMD = ($server eq $loc_box)?"/bin/cp /etc/services $TMP":
+	"$SCP $server:/etc/services $TMP";
+    my $result = `$CMD`;
+    if(defined($result) && length($result))
+	{ die "$exe: FAILURE - $CMD\n$result" };
+    open(TMP,$TMP) or die "$exe: can't read $TMP: $!\n";
+    open(OUT,"> $TMP.out") or die "$exe: can't write $TMP.out: $!\n";
+    while(my $line = <TMP>)
+	{ if($line =~ m{\s$p_target/tcp\s})
+	    { print $line;
+	    my $ent = 'webstore_'.$uid;
+	    $ent .= ' ' x (24 - length($ent));
+	    $ent .= "$port/tcp";
+	    $ent .= ' ' x (40 - length($ent));
+	    $ent .= "# WLS10 for $Name\n";
+	    print OUT $ent;
+	    print $ent;
+	    if($t_port)
+		{ my $tent = 'tools_'.$uid;
+		$tent .= ' ' x (24 - length($tent));
+		$tent .= "$t_port/tcp";
+		$tent .= ' ' x (40 - length($tent));
+		$tent .= "# WLS10 tools for $Name\n";
+		print OUT $tent;
+		print $tent;
+		};
+	    next;
+	    };
+	if($line =~ m{^webstore_$uid\s}) { print "??? $server - $line" };
+	print OUT $line;
+	}; close TMP;
+    close OUT;
+    unlink($TMP) or die "$exe: can't rm $TMP: $!\n";
+    $CMD = ($server eq $loc_box)?
+      "/usr/bin/sudo /bin/cp $TMP.out /etc/services":
+      "$SCP $TMP.out $server:$TMP";
+    $result = `$CMD`;
+    if(defined($result) && length($result))
+	{ die "$exe: FAILURE - $CMD\n$result" };
+    unlink($TMP.'.out') or die "$exe: can't rm $TMP.out: $!\n";
+    if(!$debug && $server ne $loc_box)
+	{ # nohup is used here to gather all remote output, not because cp
+	# might run for a long time
+	$CMD = "$SSH $server /usr/bin/nohup /usr/bin/sudo /bin/cp $TMP /etc/services";
+        $result = `$CMD`;
+        if(defined($result) && length($result))
+	    { die "$exe: FAILURE - $CMD\n$result" };
+	};
+    $CMD = ($server eq $loc_box)?"/bin/rm $TMP":"$SSH $server /bin/rm $TMP";
+    $result = `$CMD`;
+    if(defined($result) && length($result))
+	{ die "$exe: FAILURE - $CMD\n$result" };
+    };
+print "Next, on secdevapp01 run \"sudo step3 $uid\"\n";
+
+exit 0;

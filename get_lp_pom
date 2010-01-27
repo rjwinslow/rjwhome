@@ -1,0 +1,10 @@
+#!/bin/bash
+SVN=http://devsvn.gspt.net/svn/legacy_components
+CMP=$1
+if [ -z $CMP ]
+then
+    echo "Usage: get_lp_pom <legacy_components_repo>"
+    exit
+fi
+CMD="/usr/bin/svn co $SVN/$CMP/trunk $CMP"
+echo $CMD

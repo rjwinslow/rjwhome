@@ -1,0 +1,7 @@
+#!/bin/bash
+cd ~/webdev/weblogic10
+./mvc.sh stop
+/usr/local/tools/scripts/updatejndi.sh dev01
+./mvc.sh stop
+sleep 3
+./mvc.sh start

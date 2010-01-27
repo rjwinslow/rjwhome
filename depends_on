@@ -1,0 +1,83 @@
+#!/usr/bin/perl
+use strict;
+use warnings;
+my $debug = 0;
+my $exe = (split /\//, $0)[-1];
+my $Iam = $ENV{'USER'} || $ENV{'LOGNAME'};
+
+my $repo = 'http://devsvn.gspt.net/svn/legacy_components/legacy_buildsystem';
+
+my %mods = ();
+
+my $TMP = '/tmp/legacy_buildsystem';
+if(-d $TMP)
+    { my $m_time = (stat($TMP))[9];
+    if((time - $m_time) < (24 * 60 * 60))
+	{ &co_l_bs };
+    }
+else { &co_l_bs };
+&parse_pom;
+
+my $module;
+foreach my $arg (@ARGV)
+    { $module = $arg
+    };
+
+foreach my $mod (sort keys %mods)
+    { print "$mod: ";
+    my $txt = '';
+    foreach my $dep (@{$mods{$mod}}) { $txt .= "$dep, " };
+    $txt =~ s/, $//;
+    print $txt."\n";
+    };
+exit 0;
+
+sub parse_pom {
+my @deps = ();
+my @gdeps = ();
+my $pushEm = 1;
+my $CMD = '/tmp/legacy_buildsystem/pom.xml';
+open(CMD,$CMD) or die "$exe: can't read $CMD: $!\n";
+while(my $line = <CMD>)
+    { next if($line =~ m{^\s*$});
+    if($line =~ s{<!-- Depends on }{})
+	{ chomp $line;
+	$line =~ s{\s*-->.*}{};
+	$line =~ s{and/or}{ };
+	$line =~ s{and}{ };
+	$line =~ s{,}{ }g;
+	next if($line =~ /^\s*$/);
+	@deps = (split /\s+/, $line);
+	next
+	};
+    if($line =~ m{<!-- Depend on webstore only -->})
+	{ push @deps, 'webstore'; next };
+    if($line =~ m{<!-- Depend on no gsi internal libs -->})
+	{ push @deps, 'only external'; next };
+    if($line =~ m{<!-- Depends webstore_oracle and others above us -->})
+	{ push @deps, 'webstore_oracle'; $pushEm = 0; next };
+    if($line =~ m{<!-- Depends on i18n and others above us -->})
+	{ push @deps, 'i18n'; push @deps, @gdeps; next };
+    if($line =~ s{.*<module>\s*}{})
+	{ chomp $line;
+	$line =~ s{\s*</module>.*}{};
+	$line =~ s{\.\./}{};
+	if($pushEm) { push @deps, $line };
+	if($pushEm) { push @gdeps, $line };
+	push @{$mods{$line}}, @deps;
+	next
+	};
+    };
+close CMD;
+}
+
+sub co_l_bs {
+my $CMD = "/usr/bin/svn co $repo/trunk $TMP";
+open(CMD,"$CMD |") or die "$exe: $CMD Failed!: $!\n";
+my $OK = 0;
+while(my $line = <CMD>)
+    { if($line =~ /^Checked out revision \d/) { $OK++ }; };
+close CMD;
+if(!$OK) { warn "$exe: check out of $repo failed\n" };
+}
+

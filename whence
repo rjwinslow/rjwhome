@@ -1,0 +1,11 @@
+#!/usr/bin/perl
+use strict;
+use warnings;
+
+my $Usage = "whence <executable_name>\n";
+if($#ARGV != 0) { die $Usage };
+my $what = $ARGV[0];
+my @dirs = split /:/, $ENV{'PATH'};
+foreach my $dir (@dirs)
+    { if(-x "$dir/$what") { print "$dir/$what\n" };
+    };

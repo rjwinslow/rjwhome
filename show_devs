@@ -1,0 +1,30 @@
+#!/usr/local/tools/perl/bin/perl
+# show_devs - show the dev service served by this server.
+
+use strict;
+use warnings;
+my $debug = 0;
+
+my $exe = (split /\//, $0)[-1];
+
+my $srvr = `uname -n`;
+chomp $srvr;
+if($srvr !~ /secdevapp0[68].gspt.net/)
+    { die "$exe: $exe must be run on secdevapp06 or secdevapp08; Aborting\n"; };
+
+# collect command line over-rides
+foreach my $arg (@ARGV)
+    { 
+    };
+
+open(JPS,"/usr/bin/psjava |") or die "$exe: can't run psjava: $!\n";
+
+while(my $line = <JPS>)
+    { my $service = (split /\s+/, $line)[5];
+    next if(!defined($service));
+    if($service eq '10mp1') { $service = (split /\s+/, $line)[6] };
+    next if($service !~ /^dev0\d/);
+    print "$service\n";
+    }; close JPS;
+
+exit 0;

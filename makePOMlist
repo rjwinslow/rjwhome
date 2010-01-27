@@ -1,0 +1,21 @@
+#!/usr/local/tools/perl/bin/perl
+use strict;
+use warnings;
+my $debug = 0;
+my $exe = (split /\//, $0)[-1];
+my $Iam = $ENV{'USER'} || $ENV{'LOGNAME'};
+
+use File::Find;
+
+my $flag;
+foreach my $arg (@ARGV)
+    { $flag = $arg
+    };
+
+my @poms;
+find(sub {if($_ eq 'pom.xml') { push @poms, $File::Find::name}}, 'tbr130');
+foreach my $pom (@poms)
+    { print "$pom\n";
+    };
+
+exit 0;

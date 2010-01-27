@@ -1,0 +1,89 @@
+#!/usr/local/tools/perl/bin/perl
+# parsepom - parse a pom.xml file
+use strict;
+use warnings;
+my $debug = 0;
+my $exe = (split /\//, $0)[-1];
+my $Iam = $ENV{'USER'} || $ENV{'LOGNAME'};
+
+use XML::Parser;
+
+my $pomStart = '<project xmlns="http://maven.apache.org/POM/4.0.0" ';
+$pomStart .= 'xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" '.
+  'xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 '.
+  'http://maven.apache.org/maven-v4_0_0.xsd">'."\n";
+
+my $xmlFile = 'pom.xml';	# set default .xml file
+foreach my $arg (@ARGV)
+    { if($arg =~ /\.xml$/) { $xmlFile = $arg; next };
+    };
+my $xmlNew = $xmlFile.$$;
+my $POM = $xmlFile;
+$POM =~ s/\.xml$//;
+
+open(NEW,"> $xmlNew") or die "$exe: can't write to $xmlNew: $!\n";
+
+# container of parsed .xml content
+my %XML = ();
+# list of xml objects; last is the currently open object
+my @current = ( $POM );
+
+# set up a parser
+my $xp = new XML::Parser('Style' => 'Objects');
+# register handlers for start, end and content of each xml object
+my %hndlrs = $xp->setHandlers(
+    'Start' => \&startElem,
+    'End' => \&endElem,
+    'Char' => \&elemStr
+    );
+# parse the file of interest
+$xp->parsefile($xmlFile);
+
+if($debug)
+    { foreach my $hand (keys %hndlrs)
+        { print "Handler: $hand  $hndlrs{$hand}\n" };
+    };
+#unlink $xmlNew or die "Can't rm $xmlNew: $!\n";
+
+exit 0;
+
+sub startElem {
+my ($x, $elem, %attrs) = @_;
+
+if(defined($elem))
+    { if($debug) { print "Start: $elem\n" };
+    push @current, $elem;
+    if($elem eq 'project')
+	{ print NEW $pomStart }
+    else { print NEW '<',$elem.'>';
+	};
+    };
+}
+
+sub elemStr {
+my ($x, $elem, %attrs) = @_;
+
+if(defined($elem))
+    { if($elem =~ /\S/)
+	{ if($debug) { print "$current[-1] value: $elem\n" };
+	print NEW $elem;
+	my $index = join '|', @current;
+	print "$index	<>	$elem\n";
+	$XML{$index} = $elem;
+	};
+    };
+}
+
+my $indent = '  ';
+sub endElem {
+my ($x, $elem, %attrs) = @_;
+
+if(defined($elem))
+    { if($debug) { print "End: $elem\n" };
+    my $index = pop @current;
+    print NEW '</'.$elem.'>'."\n";
+    if($elem eq 'project') { close NEW };
+    $indent = '  ';
+    };
+}
+

@@ -1,0 +1,80 @@
+#!/usr/local/tools/perl/bin/perl
+use strict;
+use warnings;
+my $debug = 1;
+my $exe = (split /\//, $0)[-1];
+my $Iam = $ENV{'USER'} || $ENV{'LOGNAME'};
+
+use Net::SMTP;
+use Mail::Header;
+
+my $server = 'smtp.gmail.com';
+my $smtp = Net::SMTP->new($server, Timeout => 5);
+if($debug) { print "SMTP: $smtp\n" };
+my $head = Mail::Header->new;
+if($debug)
+    { print "Header: $head\n";
+    for my $key (sort keys %{$head})
+	{ print "$key=".${$head}{$key}."\n";
+	};
+    print "mail_hdr_hash:\n";
+    for my $key (sort keys %{${$head}{'mail_hdr_hash'}})
+	{ print "$key=".${${$head}{'mail_hdr_hash'}}{$key}."\n";
+	};
+    };
+
+my $password = '';
+my $uid = '';
+my $file = '';
+foreach my $arg (@ARGV)
+    { if($arg =~ m{\.(com|net|org|edu)$}) { $server = $arg; next };
+    if(-f $arg) { $file = $arg; next };
+    $password = $arg;
+    };
+while(!length($password))
+    { print "Password on $server:\n";
+    $password = <STDIN>;
+    chomp $password;
+    $password =~ s/^\s*//;
+    $password =~ s/\s*$//;
+    };
+my $domain = (split /\./, $server)[-2].'.'.(split /\./, $server)[-1];
+while(!length($uid))
+    { print "Your mail ID on $domain:\n";
+    $uid = <STDIN>;
+    chomp $uid;
+    $uid =~ s/^\s*//;
+    $uid =~ s/\s*$//;
+    };
+
+if($debug) { print "Calling $server as ".$uid.'@'.$domain."\n" };
+my $rsp = $smtp->auth($uid.'@'.$domain, $password);
+if($debug) { print "Auth: $rsp\n" };
+$rsp = $smtp->recipient('winslowr@gsicommerce.com');
+if($debug) { print "Recipient: $rsp\n" };
+my @data = ();
+push @data, "This is a test.\r\n";
+$rsp = $smtp->data(@data);
+if($debug) { print "Data: $rsp\n" };
+$smtp->quit;
+
+#my $mailer = Mail::Mailer->new('smtp',
+#    'Server'	=> $server,
+#    'User'	=> $uid.'@'.$domain,
+#    'Password'	=> $password,
+#    );
+#if($debug) { print "mailer is $mailer\n" };
+#
+#$mailer->open({
+#    'To'	=> 'winslowr@gsicommerce.com',
+#    'From'	=> $uid.'@'.$domain,
+#    'Subject'	=> 'Test of Mail-Mailer',
+#    });
+#print $mailer "How do you like me now?\n\n-----------------\n\n";
+#if(-f $file)
+#    { open(FIL,$file) or die "$0: can't read $file: $!\n";
+#    while(<FIL>) { print $mailer $_ }; close FIL;
+#    };
+#$mailer->close or die "mail try failed: $!\n";
+
+exit 0;

@@ -1,0 +1,73 @@
+#!/usr/bin/perl
+# sb_best_host - chooses one of secdevapp0[3457] to use as the next
+# user sandbox host.  It does this by scanning all the sandbox
+# configuration files on secdevweb02:/usr/local/apache2/conf/devel -
+# references to each of the relevant sandbox hosts are counted, and
+# the host hosting the fewest sandboxen is returned.
+#   Specify UxD (uper, lower or mixed case) to choose a sandbox for a Uxd
+# developer.
+#   If -r is specified on the command line, sb_pick_host shows sandbox
+# usage on each sandbox host.
+use strict;
+use warnings;
+
+my $debug = 0;
+
+use POSIX qw( strftime );
+
+my $exe = (split '/', $0)[-1];
+
+# assume web tech developer target servers
+my @servers = qw( secdevapp03 secdevapp04 secdevapp05 );
+
+my $report = 0;	# assume normal operation (i.e. return only least used host)
+my $uxd = '';
+foreach my $arg (@ARGV)
+    { if($arg =~ /^uxd$/i)
+	{ $uxd = 'UxD';
+	@servers = qw( secdevapp04 secdevapp05 secdevapp07 );
+	next
+	}
+    elsif($arg =~ /^webtech/i) { $uxd = 'no'; next };
+    if($arg =~ /^-r/i) { $report++ };
+    };
+while(!length($uxd))
+    { print "Uxd or WebTech user?\n";
+    my $ans = <STDIN>;
+    chomp($ans);
+    $uxd = ($ans =~ /^u/i)?'UxD':($ans =~ /^w/i)?'no':'';
+    if($uxd eq 'UxD') { @servers = qw( secdevapp04 secdevapp05 secdevapp07 ) };
+    };
+
+my $loc_box = `uname -n`;
+chomp $loc_box;
+
+my $LOG = strftime("/tmp/$exe.%Y%m%d.$$.log", localtime(time));
+if($debug) { open(LOG,"> $LOG") or die "$exe: can't write $LOG: $!\n"; };
+
+my $cdir = '/usr/local/apache2/conf/devel';
+
+my %balance = ();
+my $CMD = ($loc_box =~ /^secdevweb02/)?'':'/usr/bin/ssh secdevweb02 ';
+$CMD .= (length($CMD))?"/bin/grep -h -m1 -P '^\\\\s*WebLogicHost' $cdir/*.conf":
+  "/bin/grep -h -m1 -P '^\\s*WebLogicHost' $cdir/*.conf";
+
+open(CMD,"$CMD |") or die "$exe: can't $CMD: $!\n";
+while(my $line = <CMD>)
+    { next unless($line =~ /\.gspt\.net/);
+    chomp $line;
+    my $host = (split /\s+/, $line)[-1];
+    foreach my $srvr (@servers) { if($host =~ /$srvr/) { $balance{$host}++ }};
+    };
+
+my $use = '';
+foreach my $srvr (sort { $balance{$b} <=> $balance{$a} } keys %balance)
+    { if($debug || $report)
+	{ print "$srvr hosts ".$balance{$srvr}." sandboxen\n"; };
+    $use = (split /\./, $srvr)[0];
+    };
+if($debug) { close LOG; print "$exe: LOG is $LOG\n" };
+if($report) { exit 0 };
+
+if(defined($use) && length($use)) { print "$use\n"; exit 0 }
+else { exit 1 };

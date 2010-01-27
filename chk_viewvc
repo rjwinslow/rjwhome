@@ -1,0 +1,58 @@
+#!/usr/local/tools/perl/bin/perl
+# chk_viewvc - check the configuration of ViewVC vs. SVN Repository Info
+use strict;
+use warnings;
+my $debug = 0;
+
+use LWP::Simple;
+
+my $exe = (split /\//, $0)[-1];
+
+my $srvr = `uname -n`;
+chomp $srvr;
+if($srvr !~ /secdevapp01.gspt.net/)
+    { die "$exe: $exe must be run on secdevapp01; Aborting\n"; };
+
+foreach my $arg (@ARGV) { print "$arg\n"; if($arg =~ /^-d/i) { $debug++ }; };
+
+my $SVNinfoURL =
+  'http://confluence.gspt.net/display/ss/SVN+Repository+Information';
+
+my @lines = split /\n/, get($SVNinfoURL);
+
+my %groups = ();
+foreach my $line (@lines)
+    { next if($line !~ m{http://devsvn.gspt.net/svn/([^/]+)/});
+    my $group = $1;
+    $group =~ s{".*}{};
+    my $gDir = '/opt/svn/'.$group.'_GRP/reposroot';
+    if(!-d $gDir)
+	{warn "Group $group found in SVN Repository Info has no $gDir\n" };
+    $groups{$group}++;
+    };
+if($debug) { foreach my $group (sort keys %groups) { print "$group\n" }};
+
+my $VVC = '/usr/local/tools/viewvc/viewvc.conf';
+
+my %vvgrps = ();
+open(VVC,$VVC) or die "$exe: can't read $VVC: $!\n";
+while(defined(my $line = <VVC>))
+    { next if($line =~ /^\s*#/);
+    next if($line !~ m{/opt/svn/(.+)_GRP});
+    my $grp = $1;
+    my $gDir = '/opt/svn/'.$grp.'_GRP/reposroot';
+    if(!-d $gDir)
+	{ warn "Group $grp found in $VVC has no $gDir\n" }; 
+    if(!exists($groups{$grp}))
+	{ print "viewvc.conf has $grp, not in SVN Repository Information\n";
+	next;
+	};
+    $vvgrps{$grp}++;
+    }; close VVC;
+print "-----------------------\n";
+
+foreach my $group (sort keys %groups)
+    { if(!exists($vvgrps{$group}))
+	{ print "SVN Repository Information has $group, not in viewvc.conf\n" };
+    };
+exit 0;

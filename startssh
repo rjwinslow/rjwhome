@@ -1,0 +1,58 @@
+#!/usr/local/tools/perl/bin/perl
+use strict;
+use warnings;
+my $debug = 0;
+my $exe = (split /\//, $0)[-1];
+my $Iam = $ENV{'USER'} || $ENV{'LOGNAME'};
+
+use POSIX qw( strftime );
+
+my $flag;
+foreach my $arg (@ARGV)
+    { $flag = $arg
+    };
+
+if(defined($ENV{'SSH_AGENT_PID'}))
+    { my $ssa_pid = $ENV{'SSH_AGENT_PID'};
+    if($debug) { print "SSH_AGENT_PID is $ssa_pid\n" };
+    open(PSC,$ENV{'HOME'}.'/bin/px '.$ssa_pid.' |') or
+	die "can't run px: $!\n";
+    my $result = <PSC>;
+    close PSC;
+    my $string = (defined($result) && length($result))?$result:'nothing';
+    if($debug) { print "px saw $string" };
+    if($string ne 'nothing')
+	{ $string =~ s/^\s*//;
+	chomp $string;
+	my($id, $agent) = (split /\s+/, $string)[0,-1];
+	if($debug) { print "$agent ID is $id\n" };
+	if($id ne $Iam || $agent !~ m{ssh-agent$})
+	    { warn "ssh-agent wasn't running for you on pid $ssa_pid\n";
+	    &start_ssa;
+	    }
+	else { print $string."\n" };
+	}
+    else { if($debug) { print "No px result\n" }; &start_ssa };
+    }
+else { if($debug) { print "No SSH_AGENT_PID\n" }; &start_ssa; };
+
+exit 0;
+
+sub start_ssa {
+if($debug) { print "start_ssa: Entry\n" };
+my $CMD = '/usr/bin/ssh-agent';
+if($debug) { print "start_ssa: Running ssh-agent\n" };
+open(SSA,"$CMD |") or die "$0: can't run ssh-agent: $!\n";
+my @results = <SSA>;
+close SSA;
+my $SAI = $ENV{'HOME'}.'/.ssh/agent_info';
+if($debug) { print "start_ssa: Opening agent_info\n" };
+open(SSA,"> $SAI") or die "$0: can't write $SAI: $!\n";
+foreach my $line (@results)
+    { if($line =~ /export\s+SSH_/) { print SSA $line };
+    };
+close SSA;
+print "ssh-agent is started, please run \". .ssh/agent_info\" and ".
+  "  \"/usr/bin/ssh-add ~/.ssh/id_dsa\"\n";
+}
+

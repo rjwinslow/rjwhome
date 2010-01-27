@@ -1,0 +1,103 @@
+#!/usr/local/tools/perl/bin/perl
+# step567 - do steps 5, 6 and 7 of
+# http://confluence.gspt.net/display/ss/DS2+webstore+sandbox+setup+for+WL10
+use strict;
+use warnings;
+my $debug = 0;
+
+my $Iam = $ENV{'LOGNAME'} || $ENV{'USER'};
+if(!defined($Iam) || !-d "/home/$Iam")
+    { die "$0: You have no LOGNAME or USER environment variable\n" };
+
+# these steps are executed as the developer whose sandbox is being created
+# fetch the full name via finger
+open(FGR,"/usr/bin/finger $Iam |") or die "$0: can't finger $Iam: $!\n";
+my $FGR = <FGR>;
+close FGR;
+my $Name = ($FGR =~ m{Name:\s*(.*)$})?$1:'';
+
+my $MKDIR = '/bin/mkdir';
+
+my $exe = (split m{/}, $0)[-1];
+
+foreach my $arg (@ARGV) { $Name .= "$arg " };
+if(!length($Name))
+    { die "$0: Usage: $exe <first_name> <last_name>\n" };
+
+chdir("/home/$Iam") or die "$0: can't cd to /home/$Iam: $!\n";
+
+# edit the standard .profile template file to create a standard template file
+# for this developer
+my $TPL = '/home/build/TEMPLATE.profile';
+open(TPL,$TPL) or die "$0: can't read $TPL: $!\n";
+my $PRF = "/home/$Iam/.profile";
+if($debug) { $PRF .= '2' };
+my $editOK = 0;
+if(-f $PRF)
+    { print "Your $PRF file already exists, create a standard one?\n";
+    my $ans = <STDIN>;
+    chomp $ans;
+    if($ans =~ /^y/i)
+	{ my $BAK = (!-f "$PRF.bak")?"$PRF.bak":
+	    (!-f "$PRF.$$")?"$PRF.$$":"$PRF.old".$$."bak";
+	my $CMD = "/bin/mv $PRF $BAK";
+	my $result = `$CMD`;
+	if(defined($result) && length($result))
+	    { die "$exe: $CMD failed\n$result" };
+	$editOK = 1;
+	};
+    }
+else { $editOK = 1 };
+if($editOK)
+    { open(PRF,"> $PRF") or die "$0: can't write $PRF: $!\n";
+    while(defined(my $line = <TPL>))
+        { $line =~ s{User Name}{$Name};
+        $line =~ s{USERNAME}{$Iam}g;
+        print PRF $line;
+        }; close TPL;
+    close PRF;
+    };
+
+my $copySCM = 1;
+if(-d "./.scm")
+    { print "You already have a .scm directory. Do you want to update it?\n";
+    my $ans = <STDIN>;
+    $copySCM = ($ans =~ /^y/i)?1:0;
+    };
+if($copySCM)
+    { my $CMD = "/bin/cp -r /home/build/.scm .";
+    my $result = `$CMD`;
+    if(defined($result) && length($result))
+        { die "$0: Unexpected ERROR\n$CMD\n$result" };
+    };
+
+my $doneMsg = "Now do this:\n  cd ~; . ./.profile; cvs login\n";
+if(-d 'webdev')
+    { print "You already have a webdev directory\n";
+    print $doneMsg;
+    exit;
+    };
+my $CMD = "$MKDIR webdev";
+my $result = `$CMD`;
+if(defined($result) && length($result))
+    { die "$0: Unexpected ERROR\n$CMD\n$result" };
+
+chdir('webdev') or die "$0: can't cd to $ENV{'PWD'}/webdev: $!\n";
+
+$CMD = "$MKDIR projects";
+$result = `$CMD`;
+if(defined($result) && length($result))
+    { die "$0: Unexpected ERROR\n$CMD\n$result" };
+
+$CMD = "$MKDIR -p wls10domains/$Iam";
+$result = `$CMD`;
+if(defined($result) && length($result))
+    { die "$0: Unexpected ERROR\n$CMD\n$result" };
+
+$CMD = "/bin/ln -s wls10domains/$Iam weblogic10";
+$result = `$CMD`;
+if(defined($result) && length($result))
+    { die "$0: Unexpected ERROR\n$CMD\n$result" };
+
+print $doneMsg;
+exit 0;

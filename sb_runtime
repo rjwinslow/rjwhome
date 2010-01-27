@@ -1,0 +1,33 @@
+#!/usr/local/tools/perl/bin/perl
+# sb_runtime - show longest running sandboxen (and other java tasks)
+use strict;
+use warnings;
+
+my $limit = 60;		# ignore processes with less than this amount of runtime
+
+my $CMD = '/usr/bin/psjava -d';
+
+my %tab = ();
+open(CMD,"$CMD 2>&1 |") or die "$0: can't run psjava: $!\n";
+while(defined(my $ent = <CMD>))
+    { if($ent =~ /PID/) { next };
+    if($ent =~ /----- /) { next };
+    chomp $ent;
+    my ($pid, $age, $type, $inst, $ver) = split /\|/, $ent;
+    if(!defined($age) || $age !~ /^\d+\s+[mhd]/)
+	{ next };
+    my ($mins, $units) = split /\s+/, $age;
+    if($units eq 'hours') { $mins *= 60 }
+    elsif($units eq 'days') { $mins *= 60 * 24 };
+    next if($mins < $limit);
+    $tab{$mins} .= "$mins	$pid	$inst $ver\n";
+    };
+close CMD;
+
+print "Minutes	PID	What\n--------------------\n";
+foreach my $tval (sort {$b <=> $a} keys %tab)
+    { my $show = ($#ARGV < 0)?1:0;
+    foreach my $arg (@ARGV) { if($tab{$tval} =~ /$arg/) { $show++; } };
+    if($show) { print $tab{$tval}; };
+    };
+exit 0;

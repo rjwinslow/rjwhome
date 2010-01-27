@@ -1,0 +1,188 @@
+#!/usr/local/tools/perl/bin/perl
+# chk_envs - extract the current apps per env from reports/showEnvs.html
+use strict;
+use warnings;
+my $debug = 0;
+my $exe = (split /\//, $0)[-1];
+my $Iam = $ENV{'USER'} || $ENV{'LOGNAME'};
+
+use LWP::Simple;
+
+my $URL = 'http://secdevapp07.gspt.net/reports/showEnvs.html';
+#my @apps = qw( Webstore Catman RT Global CSR TLS analyticsResources );
+# establish a hash of main applications
+my %apps = ('Webstore', 0, 'Catman', 1, 'RT', 2, 'Global', 3,
+  'CSR', 4, 'TLS', 5, 'analyticsResources', 6);
+
+# set up store, tool and parent URLs for fetching pom.xml files
+my $SVN_URL = 'http://devsvn.gspt.net/svn/';
+my $WSpomRepo = $SVN_URL.'legacy_applications/gsi-legacy-store-webapp/branches';
+my $RTpomRepo = $SVN_URL.'legacy_applications/gsi-legacy-tools-webapp/branches';
+my $parentURL = $SVN_URL.'legacy_components/legacy_parent/branches';
+
+# set up a list of applications of current interest
+# (has a defined fetchPom routine)
+my %Apps = ( 'Webstore' => $WSpomRepo, 'RT' => $RTpomRepo );
+
+# during development, this tool might consume a lot of disk space while
+# gathering pom.xml files - run this only on secdevapp07 for now
+my $loc_box = `uname -n`;
+chomp $loc_box;
+if($loc_box ne 'secdevapp07.gspt.net')
+    { die "$exe: you must run $exe on secdevapp07 only, not $loc_box\n" };
+
+# secdevapp07:/gsice/integration provides copious disk space;
+#   but doesn't exist elsewhere
+#my $TMPd = '/gsice/integration/chk_envs'.$$;
+my $TMPd = '/gsice/integration/chk_envs';
+
+my $flag;	# stub for command line argument collection
+foreach my $arg (@ARGV)
+    { $flag = $arg
+    };
+
+#if(-d $TMPd) { die "$exe: Giving up: $TMPd exists\n" };
+
+my @devs = ();		# a list of environments (DEV01 .. DEVnn)
+my %devs = ();		# a hash of environment info
+my $cur_dev = '';	# the current environment we're scanning
+
+my $page = get($URL);
+my @lines = split /\n/, $page;
+
+my $inBody = 0;		# flag to skip over header stuff
+foreach my $line (@lines)
+    { if($line =~ m{<body>}) { $inBody++; next };
+    next unless($inBody);
+    if($line =~ m{(dev\d\d)/secdevapp\d\d\s+status})
+	{ $cur_dev = $1;	# record new environment found
+	push @devs, $cur_dev;
+	next
+	};
+    # lines w/o markup within environment sections are usually apps
+    if($line !~ /^</)
+	{ last if($line =~ /^Report Finished /);
+	chomp $line;
+	if(length($cur_dev))	# ignore !markedup lines prior to env sections
+	    { push @{$devs{$cur_dev}}, $line; # make list of apps in this env
+	    };
+	};
+    };
+
+foreach my $app (sort keys %Apps)
+    { print "---------\n$app:\n";
+    my $idx = $apps{$app};	# fetch the index into the list of apps
+    # this relies on the fact that reports/showEnvs.html shows each app in 
+    # the same order within each environment
+    foreach my $dev (sort keys %devs)
+	{ my $val = (defined(${$devs{$dev}}[$idx]))?${$devs{$dev}}[$idx]:'<None>';
+	print "$dev	$app:	$val\n";
+	my $appVer = &getAppVer($val);
+	my $POM = &fetchPom($app, $appVer);
+	if(length($POM))
+	    { my $parent = &parsePom($POM);
+	    print "    $app parent version: $parent\n";
+	    }
+	else { warn "    No pom.xml for $app  $appVer\n" };
+	};
+    };
+
+# clean up
+my $CMD = '/bin/rm -rf '.$TMPd;
+my $result; #my $result = `$CMD`;
+if(defined($result) && length($result)) { print "$CMD\n$result" };
+exit 0;
+
+sub fetchPom {
+my ($app, $ver) = @_;
+
+# if we already have the results, return them and done
+if(-f "$TMPd/$app-$ver/pom.xml") { return "$TMPd/$app-$ver/pom.xml" };
+my $CMD;
+my $result;
+my $repo;
+if(exists($Apps{$app}))
+    { $repo = $Apps{$app} }
+else { warn "$exe: fetchPom doesn't yet handle the $app application\n";
+    return ''
+    };
+$CMD = '/usr/bin/svn ls '.$Apps{$app}."/$ver 2>&1";
+$result = `$CMD`;
+if($result !~ /\bpom.xml\b/)
+    { #warn "$exe: found no $repo/$app/$ver/pom.xml\n";
+    #warn "$exe: found no $app/$ver/pom.xml\n";
+    return '';
+    };
+$CMD = '/usr/bin/svn co '.$Apps{$app}."/$ver $TMPd/$app-$ver 2>&1";
+$result = `$CMD`;
+if($result !~ m{Checked out revision \d})
+    { my $appURL = $Apps{$app};
+    $appURL =~ s{branches$}{trunk};
+    $ver = 'trunk';
+    $CMD = '/usr/bin/svn co '."$appURL $TMPd/$app-$ver 2>&1";
+    $result = `$CMD`;
+    if($result !~ m{Checked out revision \d})
+	{ warn "$CMD Failed?!?\n$result"; return '' };
+    &pomStrip("$TMPd/$app-$ver");
+    }
+else { &pomStrip("$TMPd/$app-$ver") };
+
+if(-f "$TMPd/$app-$ver/pom.xml")
+    { return "$TMPd/$app-$ver/pom.xml" }
+elsif(-f "$TMPd/$app/pom.xml")
+    { return "$TMPd/$app/pom.xml" }
+else { warn "$exe: found no $repo/$app/pom.xml\n"; return '' };
+}
+
+# all we care about is pom.xml - this routime discards everything else
+sub pomStrip {
+my ($pomDir) = @_;
+
+my $CMD; my $result;
+opendir(TMP,$pomDir) or die "$exe: can't read $pomDir directory: $!\n";
+my @junk = grep {$_ ne 'pom.xml' && $_ !~ /^\./} readdir TMP;
+closedir TMP;
+
+for my $junk (@junk)
+    { my $X = "$pomDir/$junk";
+    $CMD = '/bin/rm '; $CMD .= (-d $X)?'-rf ':' '; $CMD .= $X;
+    $result = `$CMD`;
+    if(defined($result) && length($result)) { print "$CMD\n$result" };
+    };
+}
+
+my %PomVers = ();
+
+sub parsePom {
+my ($POM) = @_;
+
+# if we've already parsed this, return result
+if(exists($PomVers{$POM})) { return $PomVers{$POM} };
+open(POM,$POM) or die "$exe: can't read $POM: $!\n";
+my @lines = <POM>;
+close POM;
+
+my $inParent = 0;
+my $p_version = '';
+foreach my $line (@lines)
+    { if($line =~ m{<parent>}) { $inParent = 1 };
+    if($line =~ m{<version>([^<]+)</version>}) { $p_version = $1; last };
+    if($line =~ m{</parent>}) { $inParent = 0 };
+    };
+$PomVers{$POM} = $p_version;
+return $p_version
+}
+
+# routine to extract the application version from the app tag
+# relies on tag naming conventions
+sub getAppVer {
+my ($appTag) = @_;
+
+my ($maj, $min, $rel) = (split /_/, $appTag)[2,3,4];
+if(defined($rel) && length($rel)) { $rel =~ s{-SNAPSHOT}{} };
+if($rel =~ /^B/) { $rel = '0' };	# ignore build numbers
+if(defined($rel) && length($rel))
+    { return "$maj.$min.$rel" }
+else { return "$maj.$min" };
+}
+

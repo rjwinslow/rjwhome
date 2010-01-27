@@ -1,0 +1,30 @@
+#!/usr/local/tools/perl/bin/perl
+use strict;
+use warnings;
+my $debug = 0;
+my $exe = (split /\//, $0)[-1];
+my $Iam = $ENV{'USER'} || $ENV{'LOGNAME'};
+
+my $sql_code = "select component_name, b.branch_name, f.file_path || f.file_name
+  from scm_file f
+  join status s        on f.lock_status_id = s.status_id
+  join branch b        on f.branch_id      = b.branch_id
+  join scm_component c on f.component_id   = c.component_id
+where s.status_value = 'LockToAuthor'
+   and f.scm_author like '%' || __UID__ || '%';
+";
+
+my $work_server = 'secdevapp01';
+
+my $loc_box = `uname -n`;
+chomp $loc_box;
+if($loc_box ne "$work_server.gspt.net")
+    { die "$exe: you can't run $exe on $loc_box, use $work_server\n" };
+
+my $flag;
+foreach my $arg (@ARGV)
+    { $flag = $arg
+    };
+
+print $sql_code;
+exit 0;

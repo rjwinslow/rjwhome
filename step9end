@@ -1,0 +1,104 @@
+#!/usr/local/tools/perl/bin/perl
+# step9end - do steps 9 through the end of
+# http://confluence.gspt.net/display/ss/DS2+webstore+sandbox+setup+for+WL10
+use strict;
+use warnings;
+my $debug = 1;
+
+my $Iam = $ENV{'LOGNAME'} || $ENV{'USER'};
+if(!defined($Iam) || !-d "/home/$Iam")
+    { die "$0: This user has no LOGNAME environment variable\n" };
+
+my $MKDIR = '/bin/mkdir';
+
+chdir("/home/$Iam") or die "$0: can't cd to /home/$Iam: $!\n";
+
+print "Running insertStoreInternetAddress.sh\n";
+my $CMD = "/usr/local/tools/scripts/insertStoreInternetAddress.sh 2>&1";
+my $result = `$CMD`;
+if(defined($result) && length($result))
+    { if($result !~ /inserting rows into store_internet_address for user/)
+	{ die "$0: Unexpected ERROR\n$CMD\n$result"; };
+    };
+
+chdir("webdev/weblogic10")
+  or die "$0: can't cd to /home/$Iam/webdev/weblogic10: $!\n";
+
+print "Fetching templates.\n";
+$CMD = "/bin/cp /home/build/webdev/projects/wls10dev/templates/* . 2>&1";
+$result = `$CMD`;
+if(defined($result) && length($result))
+    { die "$0: Unexpected ERROR\n$CMD\n$result" };
+
+# edit velocity.properties
+print "Editing velocity.properties\n";
+$CMD = "/bin/mv velocity.properties velocity.propertiesIN 2>&1";
+$result = `$CMD`;
+if(defined($result) && length($result))
+    { die "$0: Unexpected ERROR\n$CMD\n$result" };
+open(OLD,'velocity.propertiesIN')
+  or die "$0: can't read velocity.propertiesIN: $!\n";
+open(VEL,'> velocity.properties')
+  or die "$0: can't write velocity.properties: $!\n";
+while(defined(my $line = <OLD>))
+    { $line =~ s/_userid_/$Iam/g;
+    }; close OLD;
+close VEL;
+unlink('velocity.propertiesIN')
+  or die "$0: can't remove velocity.propertiesIN: $!\n";
+
+chdir("/home/$Iam/webdev/projects")
+  or die "$0: can't cd to /home/$Iam/webdev/projects: $!\n";
+
+print "Fetching gsi_presentation; should take awhile ...\n";
+$CMD = "/usr/bin/cvs co -r WSMAINT gsi_presentation 2>&1";
+$result = `$CMD`;
+if(defined($result) && length($result))
+    { if($result !~ m{ gsi_presentation/gsi/})
+	{ die "$0: Unexpected ERROR\n$CMD\n$result" };
+    };
+
+print "Fetching fog.\n";
+chdir("gsi_presentation/gsi/")
+ or die "$0: can't cd to /home/$Iam/webdev/project/gsi_presentation/gsi/: $!\n";
+$CMD = "/usr/bin/cvs co fog 2>&1";
+$result = `$CMD`;
+if(defined($result) && length($result))
+    { if($result !~ m{cvs checkout: Updating fog/})
+	{ die "$0: Unexpected ERROR\n$CMD\n$result" };
+    };
+
+print "Running install_webstore_ds2_wl10.sh\n";
+$CMD = '/usr/local/tools/scripts/install_webstore_ds2_wl10.sh dev01 ';
+$CMD .= $ENV{'USER'}.' 2>&1';
+$result = `$CMD`;
+if(!defined($result) || $result !~ m{doing the edits now for gsi.properties})
+    { die "$0: Unexpected ERROR\n$CMD\n$result" };
+
+print "Running update_webstore.sh\n";
+$CMD = "/usr/local/tools/scripts/update_webstore.sh dev01 2>&1";
+$result = `$CMD`;
+if(!defined($result) || $result !~ m{cvs -q up -d -r WSMAINT WEB-INF})
+    { die "$0: Unexpected ERROR\n$CMD\n$result" };
+
+chdir("/home/$Iam/webdev/weblogic10/")
+ or die "$0: can't cd to /home/$Iam/webdev/weblogic10/: $!\n";
+$CMD = "/bin/ln -s /home/$Iam/webdev/projects/gsi_presentation htdocs 2>&1";
+$result = `$CMD`;
+if(defined($result) && length($result))
+    { die "$0: Unexpected ERROR\n$CMD\n$result" };
+
+print "Starting and ";
+$CMD = "./mvc.sh start 2>&1";
+$result = `$CMD`;
+if(!defined($result) || $result !~ m{redircting output to mvc.log})
+    { die "$0: Unexpected ERROR\n$CMD\n$result" };
+sleep(90);
+print "deploying weblogic\n";
+$CMD = "./mvc.sh deploy 2>&1";
+$result = `$CMD`;
+if(!defined($result) || $result !~ m{Target state: deploy failed on Server webstore_$Iam})
+    { die "$0: Unexpected ERROR\n$CMD\n$result" };
+
+exit 0;
+

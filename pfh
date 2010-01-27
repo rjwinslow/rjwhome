@@ -1,0 +1,74 @@
+#!/usr/local/tools/perl/bin/perl
+# pfh - quick test of encapsulating volatile config file technique
+use strict;
+use warnings;
+my $debug = 1;
+my $exe = (split /\//, $0)[-1];
+my $Iam = $ENV{'USER'} || $ENV{'LOGNAME'};
+
+my $b_version = '1.2.3';
+my @developers = qw( sleepy dopey bashful );
+my $SS_conf = 'http://devsvn.gspt.net/svn/operations/shared_services/'.
+  'svn_configuration/trunk';
+
+# addUserPerms returns an anonymous list whose first (element 0) item is
+# the directory it populated with the svn permissions files for each group,
+# second item is the full path to the legacy_applications permissions file,
+# third item is the line number within the file of the gsi-legacy-store-webapp
+# entry, fourth item
+my $permFileInfo = &addUserPerms('legacy_applications','gsi-legacy-store-webapp');
+my $conf = ${$permFileInfo}[1];
+&removeUserPerms($permFileInfo);
+my $CMD = '/bin/rm -rf '.${$permFileInfo}[0];
+my $result = `$CMD`;
+if(defined($result) && length($result)) { print "$CMD\n$result" };
+exit 0;
+
+sub addUserPerms {
+my ($group, $repo) = @_;
+
+my $permsDir = '';      # first create a temporary directory to hold the branch
+if(-d '/tmp/svn_perms'.$$)
+    { die "$exe: giving up: /tmp/svn_perms$$ directory exists\n" }
+else { $permsDir = "/tmp/svn_perms$$" };
+#mkdir $permsDir or die "$exe: can't create $permsDir directory: $!\n";
+my $CMD = "/usr/bin/svn co $SS_conf $permsDir";
+my $RES = `$CMD`;
+my $CNF = "$permsDir/svnperms.conf.$group";
+my $finalLine = '';     # holds a few lines to be restored before exit
+my $finalIndex = -1;
+open(CNF,'+<',$CNF) || die "$exe: can't update $CNF: $!\n";
+my @CNF = <CNF>;
+foreach my $lidx (0 .. $#CNF)
+    { if($CNF[$lidx] =~ m{\[$repo\]})
+        { $finalLine = $CNF[$lidx];
+        $finalIndex = $lidx;
+        $CNF[$lidx] .= '/.* = '.$ENV{'USER'}.'(add,remove,update)'."\n";
+        $CNF[$lidx] .= "branches/$b_version/.* = ";
+        $finalLine .= "branches/$b_version/.* = ";
+        $CNF[$lidx] .= join ',', @developers;
+        $finalLine .= join ',', @developers;
+        $CNF[$lidx] .= '(add,update,remove)'."\n";
+        $finalLine .= '(add,update,remove)'."\n";
+        };
+    };
+seek(CNF,0,0) || die "$exe: seek on $CNF failed: $!\n";
+print CNF @CNF;
+truncate(CNF,tell(CNF)) or die "$exe: truncation of $CNF failed: $!\n";;
+close(CNF) or die "$exe: closure of $CNF failed: $!\n";
+return [$permsDir, $CNF, $finalIndex, $finalLine, \@CNF];
+}
+
+sub removeUserPerms {
+my ($pInfo) = @_;
+
+my $CNF = ${$pInfo}[1];
+
+open(CNF,'+<',$CNF) || die "$exe: can't update $CNF: $!\n";
+${${$pInfo}[4]}[${$pInfo}[2]] = ${$pInfo}[3];
+seek(CNF,0,0);
+print CNF @{${$pInfo}[4]};
+truncate(CNF,tell(CNF)) or die "$exe: truncation of $CNF failed: $!\n";;
+close(CNF) or die "$exe: closure of $CNF failed: $!\n";
+}
+

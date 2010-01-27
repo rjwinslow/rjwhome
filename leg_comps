@@ -1,0 +1,92 @@
+#!/usr/bin/perl
+use strict;
+use warnings;
+my $debug = 0;
+my $exe = (split /\//, $0)[-1];
+my $Iam = $ENV{'USER'} || $ENV{'LOGNAME'};
+
+my @comps = qw(
+   TRUWebService
+   TRUWebServiceTools
+   addressverify
+   authentication
+   backend_utilities
+   boot
+   bootstudio
+   breadcrumbs
+   cache_warmup
+   cms
+   crm
+   crypt
+   customtags
+   dbconnection
+   email_campaigns
+   epiphanyclient
+   ess
+   events
+   gbuy
+   gift
+   gsi-legacy-tools-webapp
+   gsi_core
+   gsi_tools
+   i18n
+   inventory_utilities
+   jda
+   jdabatch
+   jmsclient
+   legacy_buildsystem
+   legacy_parent
+   logging
+   mailer
+   nexus
+   partner_rtc
+   payment
+   paynet
+   presentation
+   publishtools
+   realmedia
+   recentlyviewed
+   search
+   searchtools
+   shipfromClient
+   storetools
+   svs
+   taxclient
+   taxware
+   thirdpartyorderitem
+   tracking
+   value_link
+   webservices
+   webstore
+   webstore_emulation
+   webstore_oracle
+   webstore_preview
+   wlstools
+   wocclient
+   xmltools
+);
+
+my $prefix = 'http://devsvn.gspt.net/svn/legacy_components';
+
+my $flag;
+foreach my $arg (@ARGV)
+    { $flag = $arg
+    };
+$flag = (defined($flag) && $flag =~ /^-?-?br?a?n?c?h?/)?1:0;
+
+my $count = 0;
+for my $Comp (@comps)
+    { if($flag)
+	{ my $CMD = "/usr/bin/svn ls $prefix/$Comp/branches";
+	open(CMD,"$CMD | ") or die "$0: can't run $CMD: $!\n";
+	while(my $br = <CMD>)
+	    { print "$prefix/$Comp/branches/$br";
+	    $count++;
+	    }; close CMD;
+	}
+    else { print "$prefix/$Comp/trunk\n"; $count++ };
+    };
+my $what = ($flag)?'component branches':'components';
+print "-----\nThere are $count $what.\n";
+
+exit 0;
